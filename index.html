@@ -592,6 +592,56 @@ img, iframe { max-width: 100%; }
 .ipl-h-badge:hover{opacity:.8;text-decoration:underline}
 .ipl-cal-cell:hover:not([data-past="1"]){filter:brightness(.96)}
 </style>
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBJNfQZ5jsaohpqlxgwvDpS03ED0MeeHPw",
+      authDomain: "tracker-heures.firebaseapp.com",
+      projectId: "tracker-heures",
+      storageBucket: "tracker-heures.firebasestorage.app",
+      messagingSenderId: "384007689748",
+      appId: "1:384007689748:web:b7e276c0eae549facf7901"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+    const REF = doc(db, 'tracker', 'data');
+
+    // Expose to global scope for the main script
+    window._fbSave = async (data) => {
+      try {
+        await setDoc(REF, data);
+        const el = document.getElementById('fb-status');
+        if(el){ el.textContent = '☁️ Synchronisé'; el.style.color = 'var(--accent)'; }
+      } catch(e) {
+        const el = document.getElementById('fb-status');
+        if(el){ el.textContent = '⚠️ Erreur sync'; el.style.color = 'var(--orange)'; }
+        console.error('Firebase save error:', e);
+      }
+    };
+
+    window._fbLoad = async () => {
+      try {
+        const snap = await getDoc(REF);
+        return snap.exists() ? snap.data() : null;
+      } catch(e) {
+        console.error('Firebase load error:', e);
+        return null;
+      }
+    };
+
+    // Real-time sync: when another device saves, update this one
+    window._fbListen = (callback) => {
+      onSnapshot(REF, (snap) => {
+        if(snap.exists()) callback(snap.data());
+      });
+    };
+
+    document.dispatchEvent(new Event('firebase-ready'));
+  </script>
 </head>
 <body>
 <div class="app">
@@ -607,6 +657,7 @@ img, iframe { max-width: 100%; }
   <button class="nav-btn" id="nav-social" onclick="showView('social')">Contenu social</button>
   <button class="nav-btn" id="nav-creative" onclick="showView('creative')">🎨 Créatif</button>
   <button class="nav-btn" id="nav-tasks" onclick="showView('tasks')">Tâches</button>
+<span id="fb-status" style="font-size:10px;color:var(--muted);margin-left:auto;padding:0 8px;white-space:nowrap">☁️ Chargement…</span>
 </div>
 
 <!-- ══ DASHBOARD ══ -->
@@ -678,7 +729,7 @@ img, iframe { max-width: 100%; }
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:8px">
       <div class="export-field"><label>Nom du client</label><input type="text" id="exp-client" value="WriteControl"></div>
-      <div class="export-field"><label>Contact client</label><input type="text" id="exp-client-contact" placeholder="Jean Dupont"></div>
+      <div class="export-field"><label>Contact client</label><input type="text" id="exp-client-contact" placeholder="Maxime Dhalluin"></div>
       <div class="export-field"><label>SIRET client</label><input type="text" id="exp-client-siret" placeholder="SIRET du client"></div>
       <div class="export-field"><label>Adresse client</label><input type="text" id="exp-client-addr" placeholder="Adresse complète"></div>
     </div>
@@ -1287,8 +1338,76 @@ let fixedDays=[],days=[],history=[],nextMonthPlan={},currentEditDay=null;
 let tasks=[], editTaskIdx=null, taskFilter='all';
 let ideas=[], editIdeaIdx=null, ideaFilter='all';
 
-function save(){try{localStorage.setItem('wc_fixed',JSON.stringify(fixedDays));localStorage.setItem('wc_days',JSON.stringify(days));localStorage.setItem('wc_history',JSON.stringify(history));localStorage.setItem('wc_next',JSON.stringify(nextMonthPlan));}catch(e){}}
-function load(){try{const f=localStorage.getItem('wc_fixed'),d=localStorage.getItem('wc_days'),h=localStorage.getItem('wc_history'),n=localStorage.getItem('wc_next');fixedDays=f?JSON.parse(f):JSON.parse(JSON.stringify(DEFAULT_FIXED));days=d?JSON.parse(d):[];history=h?JSON.parse(h):[];nextMonthPlan=n?JSON.parse(n):{};}catch(e){fixedDays=JSON.parse(JSON.stringify(DEFAULT_FIXED));days=[];history=[];nextMonthPlan={};}}
+function save(){
+  try{
+    localStorage.setItem('wc_fixed',JSON.stringify(fixedDays));
+    localStorage.setItem('wc_days',JSON.stringify(days));
+    localStorage.setItem('wc_history',JSON.stringify(history));
+    localStorage.setItem('wc_next',JSON.stringify(nextMonthPlan));
+    localStorage.setItem('wc_saved_at', Date.now().toString());
+  }catch(e){}
+  // Firebase cloud sync
+  if(window._fbSave){
+    const el=document.getElementById('fb-status');
+    if(el){el.textContent='☁️ Sauvegarde…';el.style.color='var(--muted)';}
+    window._fbSave({
+      fixedDays, days, history, nextMonthPlan,
+      posts, tasks, contentItems, canvaItems, ideas,
+      savedAt: Date.now()
+    });
+  }
+}
+function load(){
+  // Load from localStorage first (instant)
+  try{
+    const f=localStorage.getItem('wc_fixed'),d=localStorage.getItem('wc_days'),
+          h=localStorage.getItem('wc_history'),n=localStorage.getItem('wc_next');
+    fixedDays=f?JSON.parse(f):JSON.parse(JSON.stringify(DEFAULT_FIXED));
+    days=d?JSON.parse(d):[];
+    history=h?JSON.parse(h):[];
+    nextMonthPlan=n?JSON.parse(n):{};
+  }catch(e){fixedDays=JSON.parse(JSON.stringify(DEFAULT_FIXED));days=[];history=[];nextMonthPlan={};}
+  // Then try Firebase (cloud — may be more recent)
+  if(window._fbLoad){
+    window._fbLoad().then(data=>{
+      if(!data) return;
+      // Use Firebase data if it's newer
+      const fbTime = data.savedAt||0;
+      const lsTime = parseInt(localStorage.getItem('wc_saved_at')||'0');
+      if(fbTime > lsTime){
+        applyCloudData(data);
+      }
+      const el=document.getElementById('fb-status');
+      if(el){el.textContent='☁️ Synchronisé';el.style.color='var(--accent)';}
+    }).catch(()=>{
+      const el=document.getElementById('fb-status');
+      if(el){el.textContent='📴 Hors ligne';el.style.color='var(--muted)';}
+    });
+  }
+}
+
+function applyCloudData(data){
+  if(data.fixedDays)    fixedDays     = data.fixedDays;
+  if(data.days)         days          = data.days;
+  if(data.history)      history       = data.history;
+  if(data.nextMonthPlan)nextMonthPlan = data.nextMonthPlan;
+  if(data.posts)        posts         = data.posts;
+  if(data.tasks)        tasks         = data.tasks;
+  if(data.contentItems) contentItems  = data.contentItems;
+  if(data.canvaItems)   canvaItems    = data.canvaItems;
+  if(data.ideas)        ideas         = data.ideas;
+  // Save to localStorage too
+  try{
+    localStorage.setItem('wc_fixed',JSON.stringify(fixedDays));
+    localStorage.setItem('wc_days',JSON.stringify(days));
+    localStorage.setItem('wc_history',JSON.stringify(history));
+    localStorage.setItem('wc_next',JSON.stringify(nextMonthPlan));
+    localStorage.setItem('wc_saved_at', data.savedAt||Date.now());
+  }catch(e){}
+  // Re-render
+  renderPastDays(); renderDays(); updateMetrics(); updateNavBadges();
+  loadDashboard(); updateBackupDateLabel();
+}
 
 function minsToHHMM(m){if(m<0)m=0;return Math.floor(m/60)+'h'+String(Math.round(m%60)).padStart(2,'0');}
 function minsToDecimal(m){return(m/60).toFixed(2);}
