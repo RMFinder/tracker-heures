@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -728,7 +729,7 @@ img, iframe { max-width: 100%; }
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:8px">
       <div class="export-field"><label>Nom du client</label><input type="text" id="exp-client" value="WriteControl"></div>
-      <div class="export-field"><label>Contact client</label><input type="text" id="exp-client-contact" placeholder="Jean dupont"></div>
+      <div class="export-field"><label>Contact client</label><input type="text" id="exp-client-contact" placeholder="Maxime Dhalluin"></div>
       <div class="export-field"><label>SIRET client</label><input type="text" id="exp-client-siret" placeholder="SIRET du client"></div>
       <div class="export-field"><label>Adresse client</label><input type="text" id="exp-client-addr" placeholder="Adresse complète"></div>
     </div>
@@ -1369,16 +1370,17 @@ function load(){
   // Then try Firebase (cloud — may be more recent)
   if(window._fbLoad){
     window._fbLoad().then(data=>{
-      if(!data) return;
-      // Use Firebase data if it's newer
-      const fbTime = data.savedAt||0;
-      const lsTime = parseInt(localStorage.getItem('wc_saved_at')||'0');
-      if(fbTime > lsTime){
-        applyCloudData(data);
+      if(!data){ 
+        const el=document.getElementById('fb-status');
+        if(el){el.textContent='☁️ Prêt';el.style.color='var(--muted)';}
+        return; 
       }
+      // Always apply Firebase data — it's the source of truth
+      applyCloudData(data);
       const el=document.getElementById('fb-status');
       if(el){el.textContent='☁️ Synchronisé';el.style.color='var(--accent)';}
-    }).catch(()=>{
+    }).catch((e)=>{
+      console.error('Firebase load error:', e);
       const el=document.getElementById('fb-status');
       if(el){el.textContent='📴 Hors ligne';el.style.color='var(--muted)';}
     });
@@ -3677,6 +3679,17 @@ renderPastDays(); renderDays(); updateMetrics(); updateNavBadges();
 if(days.length===0) addDay();
 loadDashboard();
 updateBackupDateLabel();
+// When Firebase module finishes loading, sync from cloud
+document.addEventListener('firebase-ready', ()=>{
+  if(window._fbLoad){
+    window._fbLoad().then(data=>{
+      if(!data) return;
+      applyCloudData(data);
+      const el=document.getElementById('fb-status');
+      if(el){el.textContent='☁️ Synchronisé';el.style.color='var(--accent)';}
+    }).catch(()=>{});
+  }
+});
 document.querySelectorAll('.modal-backdrop').forEach(el=>{
   el.addEventListener('click', e=>{ if(e.target===el) el.classList.remove('open'); });
 });
