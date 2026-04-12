@@ -594,8 +594,10 @@ img, iframe { max-width: 100%; }
 </style>
   <!-- Firebase SDK -->
   <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { initializeApp }                          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, doc, setDoc, getDoc }      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
+                                                       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyBJNfQZ5jsaohpqlxgwvDpS03ED0MeeHPw",
@@ -606,41 +608,73 @@ img, iframe { max-width: 100%; }
       appId: "1:384007689748:web:b7e276c0eae549facf7901"
     };
 
-    const app = initializeApp(firebaseConfig);
-    const db  = getFirestore(app);
-    const REF = doc(db, 'tracker', 'data');
+    const app      = initializeApp(firebaseConfig);
+    const db       = getFirestore(app);
+    const auth     = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
-    // Expose to global scope for the main script
-    window._fbSave = async (data) => {
+    let currentUID = null;
+    let userRef    = null;
+
+    function getRef(uid){ return doc(db, 'users', uid, 'tracker', 'data'); }
+
+    // ── Auth functions ──
+    window._fbSignIn = async () => {
       try {
-        await setDoc(REF, data);
+        await signInWithPopup(auth, provider);
+      } catch(e){ console.error('Sign in error:', e); }
+    };
+
+    window._fbSignOut = async () => {
+      await signOut(auth);
+      currentUID = null; userRef = null;
+      const el = document.getElementById('fb-status');
+      if(el){ el.textContent = '🔐 Déconnecté'; el.style.color = 'var(--muted)'; }
+      const btn = document.getElementById('fb-login-btn');
+      if(btn){ btn.textContent = '🔐 Se connecter'; btn.onclick = window._fbSignIn; }
+    };
+
+    // ── Data functions ──
+    window._fbSave = async (data) => {
+      if(!userRef) return;
+      try {
+        await setDoc(userRef, data);
         const el = document.getElementById('fb-status');
         if(el){ el.textContent = '☁️ Synchronisé'; el.style.color = 'var(--accent)'; }
       } catch(e) {
         const el = document.getElementById('fb-status');
         if(el){ el.textContent = '⚠️ Erreur sync'; el.style.color = 'var(--orange)'; }
-        console.error('Firebase save error:', e);
       }
     };
 
     window._fbLoad = async () => {
+      if(!userRef) return null;
       try {
-        const snap = await getDoc(REF);
+        const snap = await getDoc(userRef);
         return snap.exists() ? snap.data() : null;
-      } catch(e) {
-        console.error('Firebase load error:', e);
-        return null;
+      } catch(e) { return null; }
+    };
+
+    // ── Auth state listener ──
+    onAuthStateChanged(auth, async (user) => {
+      const statusEl = document.getElementById('fb-status');
+      const btnEl    = document.getElementById('fb-login-btn');
+      if(user){
+        currentUID = user.uid;
+        userRef    = getRef(user.uid);
+        if(statusEl){ statusEl.textContent = '☁️ ' + (user.displayName||user.email).split(' ')[0]; statusEl.style.color = 'var(--accent)'; }
+        if(btnEl){ btnEl.textContent = '🔓 ' + (user.displayName||user.email).split(' ')[0]; btnEl.onclick = window._fbSignOut; }
+        // Load data from Firebase
+        const data = await window._fbLoad();
+        if(data && window.applyCloudData){ window.applyCloudData(data); }
+        document.dispatchEvent(new Event('firebase-ready'));
+      } else {
+        currentUID = null; userRef = null;
+        if(statusEl){ statusEl.textContent = '🔐 Non connecté'; statusEl.style.color = 'var(--muted)'; }
+        if(btnEl){ btnEl.textContent = '🔐 Se connecter'; btnEl.onclick = window._fbSignIn; }
+        document.dispatchEvent(new Event('firebase-ready'));
       }
-    };
-
-    // Real-time sync: when another device saves, update this one
-    window._fbListen = (callback) => {
-      onSnapshot(REF, (snap) => {
-        if(snap.exists()) callback(snap.data());
-      });
-    };
-
-    document.dispatchEvent(new Event('firebase-ready'));
+    });
   </script>
 </head>
 <body>
@@ -657,7 +691,10 @@ img, iframe { max-width: 100%; }
   <button class="nav-btn" id="nav-social" onclick="showView('social')">Contenu social</button>
   <button class="nav-btn" id="nav-creative" onclick="showView('creative')">🎨 Créatif</button>
   <button class="nav-btn" id="nav-tasks" onclick="showView('tasks')">Tâches</button>
-<span id="fb-status" style="font-size:10px;color:var(--muted);margin-left:auto;padding:0 8px;white-space:nowrap">☁️ Chargement…</span>
+<div style="display:flex;align-items:center;gap:6px;margin-left:auto;padding:0 8px">
+  <span id="fb-status" style="font-size:10px;color:var(--muted);white-space:nowrap">🔐 Non connecté</span>
+  <button id="fb-login-btn" onclick="window._fbSignIn&&window._fbSignIn()" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);cursor:pointer;white-space:nowrap">🔐 Se connecter</button>
+</div>
 </div>
 
 <!-- ══ DASHBOARD ══ -->
@@ -746,9 +783,10 @@ img, iframe { max-width: 100%; }
   </div>
   <div class="backup-bar">
     <span class="backup-bar-label">💾 Sauvegarde</span>
-    <button class="btn-backup export" onclick="exportBackupXlsx()">⬇ Exporter .xlsx</button>
-    <button class="btn-backup import" onclick="document.getElementById('import-file').click()">⬆ Importer .json</button>
+    <button class="btn-backup export" onclick="exportBackupJson()" title="Export toutes tes données en JSON — pour importer sur un autre appareil">⬇ Exporter .json</button>
+    <button class="btn-backup import" onclick="document.getElementById('import-file').click()" title="Importer un fichier .json exporté depuis ce tracker">⬆ Importer .json</button>
     <input type="file" id="import-file" accept=".json" onchange="importBackup(this)">
+    <button class="btn-backup export" onclick="exportBackupXlsx()" style="border-color:var(--blue);color:var(--blue)" title="Export complet en Excel (facture + historique + social)">📊 Export .xlsx</button>
     <span class="backup-date" id="backup-date-label"></span>
   </div>
   <div class="section-title">Journées passées — modifiables</div>
@@ -1320,14 +1358,7 @@ img, iframe { max-width: 100%; }
         <option value="story">Story</option>
         <option value="newsletter">Newsletter</option>
         <option value="blog">Blog</option>
-        <option value="autre">Autre</option>
-      </select>
-    </div>
-    <div class="modal-field"><label>Lien Canva</label><input type="url" id="cv-url" placeholder="https://www.canva.com/design/…"></div>
-    <div class="modal-field"><label>URL miniature (optionnel)</label><input type="url" id="cv-thumb" placeholder="https://..." value="">
-    </div>
-  </div>
-</div>
+        <option value="autre">Autre
 
 <script>
 
@@ -1387,7 +1418,7 @@ function load(){
   }
 }
 
-function applyCloudData(data){
+window.applyCloudData = function applyCloudData(data){
   if(data.fixedDays)    fixedDays     = data.fixedDays;
   if(data.days)         days          = data.days;
   if(data.history)      history       = data.history;
@@ -3668,6 +3699,25 @@ function importHistoryFromXlsx(input){
   reader.readAsBinaryString(file);
 }
 
+
+function exportBackupJson(){
+  const data = {
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    fixedDays, days, history, nextMonthPlan,
+    posts, tasks, contentItems, canvaItems, ideas
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = 'tracker-backup-' + date + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  localStorage.setItem(BACKUP_DATE_KEY, Date.now().toString());
+  updateBackupDateLabel();
+}
 
 // ═══════════════════════════════════════════════
 // INIT
