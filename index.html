@@ -756,6 +756,10 @@ img, iframe { max-width: 100%; }
       <div class="export-field"><label>Mois</label><input type="text" id="exp-month" value="Mars 2026"></div>
       <div class="export-field"><label>Conditions paiement</label><input type="text" id="exp-payment-terms" value="30 jours" placeholder="30 jours"></div>
     </div>
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;align-items:end">
+      <div class="export-field"><label>Objet de la facture</label><input type="text" id="exp-objet" placeholder="Ex: Développement marketing – Marché italien"></div>
+      <div class="export-field"><label><input type="checkbox" id="exp-show-detail" style="width:auto;margin-right:6px">Afficher le détail journalier</label></div>
+    </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn-export" onclick="exportXlsx()">📊 Facture .xlsx</button>
       <button class="btn-export" style="background:var(--blue)" onclick="exportInvoicePdf()">📄 Facture .pdf</button>
@@ -1525,6 +1529,8 @@ function getFields(){
     titulaire:    document.getElementById('exp-titulaire')?.value||'',
     bankName:     document.getElementById('exp-bankname')?.value||'',
     bic:          document.getElementById('exp-bic')?.value||'',
+    objet:        document.getElementById('exp-objet')?.value||'',
+    showDetail:   document.getElementById('exp-show-detail') ? document.getElementById('exp-show-detail').checked : false,
   };
 }
 function buildDays(){
@@ -2843,19 +2849,25 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   const dueStr  = due.toLocaleDateString('fr-FR');
   const cur     = f.currency || 'EUR';
   const tvaExempt = f.tvaExempt !== false;
+  const objetLabel = f.objet && f.objet.trim() ? f.objet.trim() : `Prestations de services — ${f.month}`;
 
-  // Build rows HTML
-  const rowsHtml = allDays.map((d,i)=>{
+  // Ligne principale (objet)
+  const objetRowHtml = `<tr>
+      <td style="font-weight:600">${objetLabel}</td>
+      <td style="text-align:center">${totalH}</td>
+      <td style="text-align:right">${f.rate} ${cur}</td>
+      <td style="text-align:right;font-weight:700">${totalHT} ${cur}</td>
+    </tr>`;
+
+  // Détail journalier (optionnel)
+  const detailRowsHtml = allDays.map((d)=>{
     const dh  = parseFloat(minsToDecimal(d.mins));
     const amt = (dh * f.rate).toFixed(2);
     return `<tr>
-      <td>${d.label}</td>
-      <td style="color:#7a7264;font-size:10.5px">${d.slots}</td>
-      <td style="text-align:center">${minsToHHMM(d.mins)}</td>
+      <td style="color:#7a7264">${d.label}</td>
       <td style="text-align:center">${dh}</td>
       <td style="text-align:right">${f.rate} ${cur}</td>
-      <td style="text-align:right;font-weight:600">${amt} ${cur}</td>
-      <td style="font-size:10.5px;color:#7a7264">${d.note}</td>
+      <td style="text-align:right;color:#7a7264">${amt} ${cur}</td>
     </tr>`;
   }).join('');
 
@@ -2888,6 +2900,10 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   table { width: 100%; border-collapse: collapse; margin-bottom: 4px; font-size: 11px; }
   thead th { padding: 7px 6px; text-align: left; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #7a7264; border-bottom: 2px solid #7c2c42; }
   tbody td { padding: 7px 6px; border-bottom: 1px solid #e2d6bd; vertical-align: top; }
+  .detail-title { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: #7a7264; margin: 14px 0 4px; }
+  .detail-table { font-size: 10.5px; margin-bottom: 10px; }
+  .detail-table thead th { border-bottom: 1px solid #d3c3a0; color: #7a7264; }
+  .detail-table tbody td { padding: 4px 6px; border-bottom: 1px solid #efe7d3; }
   .totals { text-align: right; margin: 14px 0 4px; }
   .totals .line { font-size: 11px; color: #7a7264; margin-bottom: 2px; }
   .totals .total-ht { font-family: Georgia, serif; font-size: 19px; font-weight: 700; color: #1f3d30; margin-top: 4px; }
@@ -2942,19 +2958,32 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   <table>
     <thead>
       <tr>
-        <th>Date / Jour</th>
-        <th>Plages horaires</th>
-        <th style="text-align:center">Durée</th>
-        <th style="text-align:center">H. déc.</th>
+        <th>Description de la prestation</th>
+        <th style="text-align:center">Quantité (h)</th>
         <th style="text-align:right">Taux</th>
         <th style="text-align:right">Montant HT</th>
-        <th>Notes</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml}
+      ${objetRowHtml}
     </tbody>
   </table>
+
+  ${f.showDetail ? `
+  <div class="detail-title">Détail journalier</div>
+  <table class="detail-table">
+    <thead>
+      <tr>
+        <th>Date / Jour</th>
+        <th style="text-align:center">Heures</th>
+        <th style="text-align:right">Taux</th>
+        <th style="text-align:right">Montant</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${detailRowsHtml}
+    </tbody>
+  </table>` : ''}
 
   <div class="totals">
     <div class="line">Sous-total HT : ${totalHT} ${cur}</div>
