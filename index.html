@@ -779,8 +779,9 @@ img, iframe { max-width: 100%; }
       <div class="export-field"><label>Mois</label><input type="text" id="exp-month" value="Mars 2026"></div>
       <div class="export-field"><label>Conditions paiement</label><input type="text" id="exp-payment-terms" value="30 jours" placeholder="30 jours"></div>
     </div>
-    <div style="display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px;align-items:end">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px;margin-bottom:12px;align-items:end">
       <div class="export-field"><label>Objet de la facture</label><input type="text" id="exp-objet" placeholder="Ex: Développement marketing – Marché italien"></div>
+      <div class="export-field"><label>Quantité (heures)</label><input type="number" id="exp-quantite" step="0.25" min="0" placeholder="Auto"></div>
       <div class="export-field"><label><input type="checkbox" id="exp-show-detail" style="width:auto;margin-right:6px">Afficher le détail journalier</label></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
@@ -1320,7 +1321,7 @@ function calcCurrentTotal(){return fixedDays.reduce((a,d)=>a+d.mins,0)+days.redu
 function getMonthName(offset=0){const d=new Date();d.setMonth(d.getMonth()+offset);return d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());}
 function getNextMonthDays(){const now=new Date();now.setMonth(now.getMonth()+1);now.setDate(1);const year=now.getFullYear(),month=now.getMonth(),daysInMonth=new Date(year,month+1,0).getDate();return{year,month,daysInMonth,firstDow:(new Date(year,month,1).getDay()+6)%7};}
 
-function showView(v){document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));document.getElementById('view-'+v).classList.add('active');document.getElementById('nav-'+v).classList.add('active');if(v==='history')renderHistory();if(v==='next')renderNextMonth();if(v==='planning'){iplInit();};if(v==='social'){renderSMWeek();renderCalMonth();}if(v==='tasks')renderTasks();if(v==='creative')renderCanva();if(v==='dashboard')loadDashboard();if(v==='invoices')renderInvoicesHistory();}
+function showView(v){document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));document.getElementById('view-'+v).classList.add('active');document.getElementById('nav-'+v).classList.add('active');if(v==='history')renderHistory();if(v==='next')renderNextMonth();if(v==='planning'){iplInit();};if(v==='social'){renderSMWeek();renderCalMonth();}if(v==='tasks')renderTasks();if(v==='creative')renderCanva();if(v==='dashboard')loadDashboard();if(v==='invoices'){renderInvoicesHistory();const qEl=document.getElementById('exp-quantite');if(qEl && !qEl.dataset.touched){qEl.placeholder='Auto : '+minsToDecimal(calcCurrentTotal())+'h';}}}
 function updateNavBadges(){const pct=Math.min(100,(calcCurrentTotal()/TARGET_MINS)*100);document.getElementById('nav-badge-current').textContent=pct.toFixed(0)+'%';const hb=document.getElementById('nav-badge-history');hb.textContent=history.length?history.length:'';hb.style.display=history.length?'':'none';const ib=document.getElementById('nav-badge-invoices');if(ib){ib.textContent=invoicesHistory.length?invoicesHistory.length:'';ib.style.display=invoicesHistory.length?'':'none';}}
 function updateMetrics(){const done=calcCurrentTotal(),left=Math.max(0,TARGET_MINS-done),pct=Math.min(100,(done/TARGET_MINS)*100);document.getElementById('m-done').textContent=minsToHHMM(done);document.getElementById('m-left').textContent=minsToHHMM(left);document.getElementById('m-avg').textContent=minsToHHMM(left/REMAINING_DAYS);document.getElementById('bar').style.width=pct.toFixed(1)+'%';document.getElementById('pct-label').textContent=pct.toFixed(1)+'%';updateNavBadges();}
 
@@ -1635,6 +1636,7 @@ function getFields(){
     bic:          document.getElementById('exp-bic')?.value||'',
     objet:        document.getElementById('exp-objet')?.value||'',
     showDetail:   document.getElementById('exp-show-detail') ? document.getElementById('exp-show-detail').checked : false,
+    manualHours:  (() => { const v = document.getElementById('exp-quantite')?.value; return v!=='' && v!=null ? parseFloat(v) : null; })(),
   };
 }
 function buildDays(){
@@ -1643,7 +1645,7 @@ function buildDays(){
     ...days.map(d=>({label:d.label+(d.date?' '+d.date:''),slots:d.slots.filter(s=>s.start&&s.end).map(s=>`${s.start}–${s.end}`).join('  ')||'—',mins:calcDayMins(d.slots),note:d.note||''}))
   ];
 }
-function exportXlsx(){if(!window.XLSX){alert('XLSX pas encore chargé.');return;}bumpInvoiceCounter();const f=getFields();const days_=buildDays();const total=calcCurrentTotal();const totalHT=(parseFloat(minsToDecimal(total))*f.rate).toFixed(2);recordInvoice(f,totalHT);buildInvoiceXlsx(f,days_,total);}
+function exportXlsx(){if(!window.XLSX){alert('XLSX pas encore chargé.');return;}bumpInvoiceCounter();const f=getFields();const days_=buildDays();const total=calcCurrentTotal();const totalH=(f.manualHours!=null&&!isNaN(f.manualHours))?f.manualHours:parseFloat(minsToDecimal(total));const totalHT=(totalH*f.rate).toFixed(2);recordInvoice(f,totalHT);buildInvoiceXlsx(f,days_,total);}
 function exportHistoryXlsx(mi){
   if(!window.XLSX){alert('XLSX pas encore chargé.');return;}
   const m=history[mi];
@@ -2929,7 +2931,8 @@ function exportInvoicePdf(){
   const f = getFields();
   const allDays = buildDays();
   const totalMins = calcCurrentTotal();
-  const totalHT = (parseFloat(minsToDecimal(totalMins))*f.rate).toFixed(2);
+  const totalH = (f.manualHours!=null && !isNaN(f.manualHours)) ? f.manualHours : parseFloat(minsToDecimal(totalMins));
+  const totalHT = (totalH*f.rate).toFixed(2);
   recordInvoice(f, totalHT);
   buildAndDownloadPdf(f, allDays, totalMins);
 }
@@ -2948,7 +2951,8 @@ function exportHistoryPdf(mi){
 }
 
 function buildAndDownloadPdf(f, allDays, totalMins){
-  const totalH  = parseFloat(minsToDecimal(totalMins));
+  const autoTotalH = parseFloat(minsToDecimal(totalMins));
+  const totalH  = (f.manualHours!=null && !isNaN(f.manualHours)) ? f.manualHours : autoTotalH;
   const totalHT = (totalH * f.rate).toFixed(2);
   const today   = new Date().toLocaleDateString('fr-FR');
   const due     = new Date(); due.setDate(due.getDate()+parseInt(f.paymentTerms)||30);
@@ -3021,7 +3025,8 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   @media print {
     body { padding: 0; }
     .sheet { max-width: none; }
-    @page { margin: 14mm; size: A4; }
+    .body-pad { padding: 30px 36px 40px; }
+    @page { margin: 0; size: A4; }
   }
 </style>
 </head>
