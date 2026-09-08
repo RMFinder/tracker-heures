@@ -1,0 +1,54 @@
+<!-- @dsCard group="Colors" name="Palette" subtitle="Principales / accents / fonds / texte & bordures" viewport="900x560" -->
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600&display=swap">
+<style>
+  body { margin: 0; background: #F4EFE1; font-family: 'Montserrat', Helvetica, Arial, sans-serif; color: #2A2A24; }
+  a { color: #7C2C42; } a:hover { color: #5E1F31; }
+  .grp { display: flex; flex-direction: column; gap: 10px; }
+  .lbl { font-weight: 600; font-size: 11px; letter-spacing: 0.22em; color: #1F3D30; }
+  .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .sw { background: #FBF8F0; border: 1px solid #E2D6BD; border-radius: 4px; overflow: hidden; }
+  .chip { height: 52px; }
+  .meta { padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .name { font-weight: 500; font-size: 11px; }
+  .hex { font-size: 11px; color: #7C2C42; }
+  .use { font-size: 11px; color: #7A7264; }
+</style>
+</head>
+<body>
+<div style="width: 900px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 22px;">
+  <div class="grp"><div class="lbl">COULEURS PRINCIPALES</div>
+    <div class="row">
+      <div class="sw"><div class="chip" style="background:#1F3D30"></div><div class="meta"><div class="name">Vert foncé</div><div class="hex">#1F3D30</div><div class="use">Titres, boutons, en-têtes</div></div></div>
+      <div class="sw"><div class="chip" style="background:#2F5443"></div><div class="meta"><div class="name">Vert moyen</div><div class="hex">#2F5443</div><div class="use">Accent secondaire, hover</div></div></div>
+      <div class="sw"><div class="chip" style="background:#14261E"></div><div class="meta"><div class="name">Vert très foncé</div><div class="hex">#14261E</div><div class="use">Variante sombre</div></div></div>
+    </div>
+  </div>
+  <div class="grp"><div class="lbl">ACCENTS</div>
+    <div class="row">
+      <div class="sw"><div class="chip" style="background:#7C2C42"></div><div class="meta"><div class="name">Bordeaux</div><div class="hex">#7C2C42</div><div class="use">Factures, liens, tagline</div></div></div>
+      <div class="sw"><div class="chip" style="background:#C26A80"></div><div class="meta"><div class="name">Rose</div><div class="hex">#C26A80</div><div class="use">Badges, highlights</div></div></div>
+      <div class="sw"><div class="chip" style="background:#B0824F"></div><div class="meta"><div class="name">Ocre</div><div class="hex">#B0824F</div><div class="use">Accents fins, alertes douces</div></div></div>
+    </div>
+  </div>
+  <div class="grp"><div class="lbl">FONDS</div>
+    <div class="row">
+      <div class="sw"><div class="chip" style="background:#F4EFE1; border-bottom:1px solid #E2D6BD"></div><div class="meta"><div class="name">Crème</div><div class="hex">#F4EFE1</div><div class="use">Fond de page</div></div></div>
+      <div class="sw"><div class="chip" style="background:#FBF8F0; border-bottom:1px solid #E2D6BD"></div><div class="meta"><div class="name">Papier</div><div class="hex">#FBF8F0</div><div class="use">Fond des cartes/blocs</div></div></div>
+      <div class="sw"><div class="chip" style="background:#E7E2CC; border-bottom:1px solid #E2D6BD"></div><div class="meta"><div class="name">Crème-vert pâle</div><div class="hex">#E7E2CC</div><div class="use">Fonds secondaires, états actifs</div></div></div>
+      <div class="sw"><div class="chip" style="background:#F3E9D6; border-bottom:1px solid #E2D6BD"></div><div class="meta"><div class="name">Ocre clair</div><div class="hex">#F3E9D6</div><div class="use">Fond ocre pâle</div></div></div>
+    </div>
+  </div>
+  <div class="grp"><div class="lbl">TEXTE &amp; BORDURES</div>
+    <div class="row">
+      <div class="sw"><div class="chip" style="background:#2A2A24"></div><div class="meta"><div class="name">Texte principal</div><div class="hex">#2A2A24</div><div class="use">Corps de texte</div></div></div>
+      <div class="sw"><div class="chip" style="background:#7A7264"></div><div class="meta"><div class="name">Texte atténué</div><div class="hex">#7A7264</div><div class="use">Texte secondaire / muted</div></div></div>
+      <div class="sw"><div class="chip" style="background:#E2D6BD; border-bottom:1px solid #E2D6BD"></div><div class="meta"><div class="name">Bordure</div><div class="hex">#E2D6BD</div><div class="use">Bordures, séparateurs</div></div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

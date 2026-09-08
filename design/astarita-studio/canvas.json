@@ -7,7 +7,7 @@
     { "file": "CarteVerso.dc.html", "title": "Carte de visite — verso", "x": 2160, "y": 1380, "w": 322, "h": 208 }
   ],
   "annotations": [
-    { "id": "note-logos", "x": 2160, "y": 1720, "w": 300, "text": "Logo et monogramme recréés en typographie web (Cormorant Garamond) — pour les tracés exacts, remplacer par les PNG officiels du logo.\nLes textes entre [crochets] sont à compléter." }
+    { "id": "note-logos", "x": 2160, "y": 1720, "w": 300, "text": "Le monogramme est l'original, extrait du PDF de la charte.\nLe logotype « Astarita » est recréé en typographie web — envoyer les fichiers SVG/PNG officiels pour les tracés exacts.\nLes textes entre [crochets] sont à compléter." }
   ],
   "launch": { "view": "canvas" }
 }

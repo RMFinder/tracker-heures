@@ -1,0 +1,27 @@
+/* Astarita Studio — jetons de la charte couleurs (PDF officiel) */
+:root {
+  /* Couleurs principales */
+  --as-vert-fonce: #1F3D30;      /* Titres, boutons, en-têtes */
+  --as-vert-moyen: #2F5443;      /* Accent secondaire, hover */
+  --as-vert-tres-fonce: #14261E; /* Variante sombre */
+
+  /* Accents */
+  --as-bordeaux: #7C2C42;        /* Factures, liens, tagline */
+  --as-rose: #C26A80;            /* Badges, highlights */
+  --as-ocre: #B0824F;            /* Accents fins, alertes douces */
+
+  /* Fonds */
+  --as-creme: #F4EFE1;           /* Fond de page */
+  --as-papier: #FBF8F0;          /* Fond des cartes/blocs */
+  --as-creme-vert: #E7E2CC;      /* Fonds secondaires, états actifs */
+  --as-ocre-clair: #F3E9D6;      /* Fond ocre pâle */
+
+  /* Texte & bordures */
+  --as-texte: #2A2A24;           /* Corps de texte */
+  --as-texte-attenue: #7A7264;   /* Texte secondaire / muted */
+  --as-bordure: #E2D6BD;         /* Bordures, séparateurs */
+
+  /* Typographie */
+  --as-font-display: 'Cormorant Garamond', Georgia, serif;
+  --as-font-body: 'Montserrat', Helvetica, Arial, sans-serif;
+}
