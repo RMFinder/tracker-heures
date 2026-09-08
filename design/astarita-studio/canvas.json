@@ -1,0 +1,13 @@
+{
+  "artboards": [
+    { "file": "Main.dc.html", "title": "Charte de marque", "x": 0, "y": 0, "w": 900, "h": 1800, "print": "flow" },
+    { "file": "SiteWeb.dc.html", "title": "Site web — accueil", "x": 1000, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Instagram.dc.html", "title": "Post Instagram 1080×1350", "x": 1000, "y": 1040, "w": 1080, "h": 1350 },
+    { "file": "CarteRecto.dc.html", "title": "Carte de visite — recto", "x": 2160, "y": 1040, "w": 322, "h": 208 },
+    { "file": "CarteVerso.dc.html", "title": "Carte de visite — verso", "x": 2160, "y": 1380, "w": 322, "h": 208 }
+  ],
+  "annotations": [
+    { "id": "note-logos", "x": 2160, "y": 1720, "w": 300, "text": "Logo et monogramme recréés en typographie web (Cormorant Garamond) — pour les tracés exacts, remplacer par les PNG officiels du logo.\nLes textes entre [crochets] sont à compléter." }
+  ],
+  "launch": { "view": "canvas" }
+}
