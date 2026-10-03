@@ -87,7 +87,9 @@ header div p{font-size:12px;color:var(--muted);margin-top:2px}
 .btn-del-day{background:none;border:1px solid var(--border);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--muted);font-size:12px;display:flex;align-items:center;justify-content:center}
 .btn-del-day:hover{background:var(--danger-light);color:var(--danger);border-color:var(--danger)}
 .slots{padding:10px 14px 6px;display:flex;flex-direction:column;gap:8px}
-.slot{display:grid;grid-template-columns:1fr 1fr 76px 30px;gap:8px;align-items:center}
+.slot{display:flex;flex-wrap:wrap;gap:8px;align-items:end;padding-bottom:4px}
+.slot>div{flex:1;min-width:100px}
+.slot>div:nth-child(3){flex:0 0 76px;min-width:76px}
 .slot label{font-size:11px;color:var(--muted);display:block;margin-bottom:3px}
 .slot input[type="time"]{width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--bg);color:var(--text);outline:none}
 .slot input[type="time"]:focus{border-color:var(--accent)}
@@ -1346,7 +1348,7 @@ window.applyCloudData = function applyCloudData(data){
 function minsToHHMM(m){if(m<0)m=0;return Math.floor(m/60)+'h'+String(Math.round(m%60)).padStart(2,'0');}
 function minsToDecimal(m){return(m/60).toFixed(2);}
 function timeToMins(t){if(!t)return null;const[h,m]=t.split(':').map(Number);return h*60+m;}
-function calcDayMins(slots){return(slots||[]).reduce((acc,s)=>{const sm=timeToMins(s.start),em=timeToMins(s.end);return acc+(sm!==null&&em!==null&&em>sm?em-sm:0);},0);}
+function calcDayMins(slots){return(slots||[]).reduce((acc,s)=>acc+calcSlotMins(s),0);}
 function calcCurrentTotal(){return fixedDays.reduce((a,d)=>a+d.mins,0)+days.reduce((a,d)=>a+calcDayMins(d.slots),0);}
 function calcClientTotalMins(clientId){
   let total = fixedDays.filter(d=>(d.client||'')===clientId).reduce((a,d)=>a+d.mins,0);
@@ -1395,9 +1397,9 @@ function categoryOptionsHtml(selected){
   html += `<option value="__new__">+ Nouveau type…</option>`;
   return html;
 }
-function onDayCategoryChange(di,val){
-  if(val==='__new__'){ addCategoryPrompt({type:'day', index:di}); return; }
-  days[di].category=val; save(); updateMetrics();
+function onSlotCategoryChange(di,si,val){
+  if(val==='__new__'){ addCategoryPrompt({type:'slot', dayIndex:di, slotIndex:si}); return; }
+  days[di].slots[si].category=val; save(); updateMetrics();
 }
 function onFixedCategory(fi,val){
   if(val==='__new__'){ addCategoryPrompt({type:'fixed', index:fi}); return; }
@@ -1410,8 +1412,8 @@ function addCategoryPrompt(pendingAssignment){
   if(!taskCategories.includes(clean)) taskCategories.push(clean);
   categoriesSave();
   if(pendingAssignment){
-    const {type, index} = pendingAssignment;
-    if(type==='day' && days[index]) days[index].category = clean;
+    const {type, index, dayIndex, slotIndex} = pendingAssignment;
+    if(type==='slot' && days[dayIndex] && days[dayIndex].slots[slotIndex]) days[dayIndex].slots[slotIndex].category = clean;
     if(type==='fixed' && fixedDays[index]) fixedDays[index].category = clean;
     save();
   }
@@ -1439,9 +1441,18 @@ function renderCategoryManageList(){
       <button class="btn-sm danger" onclick="deleteCategory('${cat.replace(/'/g,"\\'")}')" title="Supprimer">✕</button>
     </div>`).join('');
 }
+function calcSlotMins(slot){
+  if(slot.mins!=null) return slot.mins;
+  const sm=timeToMins(slot.start),em=timeToMins(slot.end);
+  return(sm!==null&&em!==null&&em>sm)?em-sm:0;
+}
 function calcCategoryTotalMins(cat){
   let total = fixedDays.filter(d=>(d.category||'')===cat).reduce((a,d)=>a+d.mins,0);
-  total += days.filter(d=>(d.category||'')===cat).reduce((a,d)=>a+calcDayMins(d.slots),0);
+  days.forEach(d=>{
+    (d.slots||[]).forEach(s=>{
+      if((s.category||'')===cat) total += calcSlotMins(s);
+    });
+  });
   return total;
 }
 function renderCategoryBreakdown(){
@@ -1497,7 +1508,7 @@ function addDay(){
   const now=new Date();
   const dateKey=now.toISOString().slice(0,10);
   const label=now.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'});
-  days.push({label,date:dateKey,slots:[{start:'',end:''}],note:'',client:'',category:''});save();renderDays();updateMetrics();}
+  days.push({label,date:dateKey,slots:[{start:'',end:'',category:''}],note:'',client:''});save();renderDays();updateMetrics();}
 function onDayClientChange(di,val){
   if(val==='__new__'){ openClientModal(null, {type:'day', index:di}); renderDays(); return; }
   days[di].client=val;save();updateMetrics();
@@ -1521,18 +1532,48 @@ function validateDay(di){
   const d=days[di];
   const m=calcDayMins(d.slots);
   if(m===0){alert('Cette journée ne contient pas d\'heures saisies.');return;}
-  fixedDays.push({label:d.label,date:d.date||'',mins:m,note:d.note||'',client:d.client||'',category:d.category||''});
+  // Répartit les minutes par type de travail (une plage peut avoir son propre type)
+  const minsByCategory = {};
+  (d.slots||[]).forEach(s=>{
+    const dur = calcSlotMins(s);
+    if(dur<=0) return;
+    const cat = s.category||'';
+    minsByCategory[cat] = (minsByCategory[cat]||0) + dur;
+  });
+  const categories = Object.keys(minsByCategory);
+  if(categories.length<=1){
+    fixedDays.push({label:d.label,date:d.date||'',mins:m,note:d.note||'',client:d.client||'',category:categories[0]||''});
+  } else {
+    categories.forEach(cat=>{
+      fixedDays.push({label:d.label+(cat?' — '+cat:''),date:d.date||'',mins:minsByCategory[cat],note:d.note||'',client:d.client||'',category:cat});
+    });
+  }
   fixedDays.sort((a,b)=>(a.date||'9999')>(b.date||'9999')?1:-1);
   days.splice(di,1);
   save();renderPastDays();renderDays();updateMetrics();
 }
 function deleteDay(di){if(confirm('Supprimer cette journée ?')){days.splice(di,1);save();renderDays();updateMetrics();}}
-function addSlot(di){days[di].slots.push({start:'',end:''});save();renderDays();}
-function removeSlot(di,si){days[di].slots.splice(si,1);if(days[di].slots.length===0)days[di].slots.push({start:'',end:''});save();renderDays();updateMetrics();}
-function onTimeChange(di,si,field,val){days[di].slots[si][field]=val;save();const s=days[di].slots[si];const sm=timeToMins(s.start),em=timeToMins(s.end);const el=document.getElementById('dur-'+di+'-'+si);if(el){if(sm!==null&&em!==null&&em>sm){el.textContent=minsToHHMM(em-sm);el.className='slot-dur filled';}else{el.textContent='—';el.className='slot-dur';}}const tot=document.getElementById('daytotal-'+di);if(tot){const m=calcDayMins(days[di].slots);tot.textContent=minsToHHMM(m);tot.className='day-total'+(m===0?' zero':'');}updateMetrics();}
+function addSlot(di){days[di].slots.push({start:'',end:'',category:''});save();renderDays();}
+function removeSlot(di,si){days[di].slots.splice(si,1);if(days[di].slots.length===0)days[di].slots.push({start:'',end:'',category:''});save();renderDays();updateMetrics();}
+function onTimeChange(di,si,field,val){
+  days[di].slots[si][field]=val;
+  days[di].slots[si].mins=null; // l'heure précise reprend le dessus sur une éventuelle durée saisie avant
+  save();
+  const el=document.getElementById('dur-'+di+'-'+si);
+  if(el){
+    const m=calcSlotMins(days[di].slots[si]);
+    if(m>0){el.textContent=minsToHHMM(m);el.className='slot-dur filled';}
+    else{el.textContent='—';el.className='slot-dur';}
+  }
+  const tot=document.getElementById('daytotal-'+di);
+  if(tot){const m=calcDayMins(days[di].slots);tot.textContent=minsToHHMM(m);tot.className='day-total'+(m===0?' zero':'');}
+  const vbtn=document.getElementById('vbtn-'+di);
+  if(vbtn) vbtn.disabled = calcDayMins(days[di].slots)===0;
+  updateMetrics();
+}
 function onNoteChange(di,val){days[di].note=val;save();const el=document.getElementById('note-'+di);if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}
 function onLabelChange(di,val){days[di].label=val;save();}
-function renderDays(){const c=document.getElementById('days-container');c.innerHTML='';days.forEach((day,di)=>{const dayM=calcDayMins(day.slots);const block=document.createElement('div');block.className='day-block';const slotsHTML=day.slots.map((slot,si)=>{const sm=timeToMins(slot.start),em=timeToMins(slot.end);let dt='—',dc='slot-dur';if(sm!==null&&em!==null&&em>sm){dt=minsToHHMM(em-sm);dc='slot-dur filled';}return`<div class="slot"><div><label>Début</label><input type="time" value="${slot.start}" onchange="onTimeChange(${di},${si},'start',this.value)"></div><div><label>Fin</label><input type="time" value="${slot.end}" onchange="onTimeChange(${di},${si},'end',this.value)"></div><div><label style="text-align:center;display:block">Durée</label><div id="dur-${di}-${si}" class="${dc}">${dt}</div></div><button class="btn-remove" onclick="removeSlot(${di},${si})">✕</button></div>`;}).join('');block.innerHTML=`<div class="day-header"><div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="date" value="${day.date||''}" onchange="onDateChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;cursor:pointer"><input id="datelabel-${di}" class="day-name-input" type="text" value="${day.label}" onchange="onLabelChange(${di},this.value)" placeholder="Nom du jour" style="flex:1"><select onchange="onDayClientChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${clientOptionsHtml(day.client)}</select><select onchange="onDayCategoryChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${categoryOptionsHtml(day.category)}</select></div><div class="day-header-right"><div id="daytotal-${di}" class="day-total${dayM===0?' zero':''}">${minsToHHMM(dayM)}</div><button class="btn-del-day" onclick="deleteDay(${di})">✕</button></div></div><div class="slots">${slotsHTML}</div><button class="btn-add-slot" onclick="addSlot(${di})">+ Ajouter une plage horaire</button><div class="note-area"><textarea id="note-${di}" rows="3" placeholder="Notes, tâches réalisées, remarques…" oninput="onNoteChange(${di},this.value)">${day.note}</textarea></div><div style="padding:0 14px 12px;display:flex;justify-content:flex-end"><button class="btn-validate-day" id="vbtn-${di}" onclick="validateDay(${di})" ${dayM===0?'disabled':''}>✓ Valider la journée</button></div>`;c.appendChild(block);const ta=document.getElementById('note-'+di);if(ta&&day.note){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});}
+function renderDays(){const c=document.getElementById('days-container');c.innerHTML='';days.forEach((day,di)=>{const dayM=calcDayMins(day.slots);const block=document.createElement('div');block.className='day-block';const slotsHTML=day.slots.map((slot,si)=>{const mins=calcSlotMins(slot);const dt=mins>0?minsToHHMM(mins):'—';const dc=mins>0?'slot-dur filled':'slot-dur';return`<div class="slot"><div><label>Début</label><input type="time" value="${slot.start||''}" onchange="onTimeChange(${di},${si},'start',this.value)"></div><div><label>Fin</label><input type="time" value="${slot.end||''}" onchange="onTimeChange(${di},${si},'end',this.value)"></div><div><label style="text-align:center;display:block">Durée</label><div id="dur-${di}-${si}" class="${dc}">${dt}</div></div><div style="min-width:150px"><label style="display:block;font-size:10px;color:var(--muted)">Type de travail</label><select onchange="onSlotCategoryChange(${di},${si},this.value)" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);width:100%">${categoryOptionsHtml(slot.category)}</select></div><button class="btn-remove" onclick="removeSlot(${di},${si})">✕</button></div>`;}).join('');block.innerHTML=`<div class="day-header"><div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="date" value="${day.date||''}" onchange="onDateChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;cursor:pointer"><input id="datelabel-${di}" class="day-name-input" type="text" value="${day.label}" onchange="onLabelChange(${di},this.value)" placeholder="Nom du jour" style="flex:1"><select onchange="onDayClientChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${clientOptionsHtml(day.client)}</select></div><div class="day-header-right"><div id="daytotal-${di}" class="day-total${dayM===0?' zero':''}">${minsToHHMM(dayM)}</div><button class="btn-del-day" onclick="deleteDay(${di})">✕</button></div></div><div class="slots">${slotsHTML}</div><button class="btn-add-slot" onclick="addSlot(${di})">+ Ajouter une plage horaire</button><div class="note-area"><textarea id="note-${di}" rows="3" placeholder="Notes, tâches réalisées, remarques…" oninput="onNoteChange(${di},this.value)">${day.note}</textarea></div><div style="padding:0 14px 12px;display:flex;justify-content:flex-end"><button class="btn-validate-day" id="vbtn-${di}" onclick="validateDay(${di})" ${dayM===0?'disabled':''}>✓ Valider la journée</button></div>`;c.appendChild(block);const ta=document.getElementById('note-'+di);if(ta&&day.note){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});}
 
 function openValidateModal(){const total=calcCurrentTotal();document.getElementById('validate-info').innerHTML=`Total du mois : <strong>${minsToHHMM(total)}</strong> sur <strong>${minsToHHMM(TARGET_MINS)}</strong> (${((total/TARGET_MINS)*100).toFixed(1)}%)`;document.getElementById('validate-label').value=getMonthName(0);document.getElementById('validate-target').value=80;document.getElementById('validate-note').value='';document.getElementById('modal-validate').classList.add('open');}
 function validateMonth(){const label=document.getElementById('validate-label').value||getMonthName(0),target=parseFloat(document.getElementById('validate-target').value)||80,note=document.getElementById('validate-note').value,totalMins=calcCurrentTotal(),allDays=[...fixedDays.map(d=>({label:d.label,mins:d.mins,slots:[],note:d.note||''})),...days.map(d=>({label:d.label,mins:calcDayMins(d.slots),slots:d.slots,note:d.note||''}))];history.unshift({label,target,totalMins,days:allDays,note,date:new Date().toISOString()});fixedDays=[];days=[];save();closeModal('modal-validate');renderPastDays();renderDays();updateMetrics();updateNavBadges();showView('history');}
@@ -1880,7 +1921,7 @@ function buildDays(clientId){
   if(clientId){ fd = fixedDays.filter(d=>(d.client||'')===clientId); dd = days.filter(d=>(d.client||'')===clientId); }
   return[
     ...fd.map(d=>({label:d.label,slots:'—',mins:d.mins,note:d.note||''})),
-    ...dd.map(d=>({label:d.label+(d.date?' '+d.date:''),slots:d.slots.filter(s=>s.start&&s.end).map(s=>`${s.start}–${s.end}`).join('  ')||'—',mins:calcDayMins(d.slots),note:d.note||''}))
+    ...dd.map(d=>({label:d.label+(d.date?' '+d.date:''),slots:d.slots.filter(s=>calcSlotMins(s)>0).map(s=>`${s.category||'Non précisé'} (${minsToHHMM(calcSlotMins(s))})`).join(', ')||'—',mins:calcDayMins(d.slots),note:d.note||''}))
   ];
 }
 function exportXlsx(){if(!window.XLSX){alert('XLSX pas encore chargé.');return;}bumpInvoiceCounter();const f=getFields();const days_=buildDays(f.clientId);const clientMins=f.clientId?calcClientTotalMins(f.clientId):calcCurrentTotal();const totalH=(f.manualHours!=null&&!isNaN(f.manualHours))?f.manualHours:parseFloat(minsToDecimal(clientMins));const totalHT=(totalH*f.rate).toFixed(2);recordInvoice(f,totalHT);buildInvoiceXlsx(f,days_,clientMins);}
@@ -1888,7 +1929,7 @@ function exportHistoryXlsx(mi){
   if(!window.XLSX){alert('XLSX pas encore chargé.');return;}
   const m=history[mi];
   const f={name:document.getElementById('exp-name').value||'Freelance',address:document.getElementById('exp-address').value||'',siret:document.getElementById('exp-siret').value||'',client:getFields().client,clientAddr:'',rate:parseFloat(document.getElementById('exp-rate').value)||25,invoiceNum:document.getElementById('exp-invoice-num').value||'FA-HIST',month:m.label};
-  const ds=m.days.map(d=>({label:d.label,slots:d.slots&&d.slots.length?d.slots.filter(s=>s.start&&s.end).map(s=>`${s.start}–${s.end}`).join('  ')||'—':'—',mins:d.mins,note:d.note||''}));
+  const ds=m.days.map(d=>({label:d.label,slots:d.slots&&d.slots.length?(d.slots.filter(s=>calcSlotMins(s)>0).map(s=>`${s.category||'Non précisé'} (${minsToHHMM(calcSlotMins(s))})`).join(', ')||'—'):'—',mins:d.mins,note:d.note||''}));
   buildInvoiceXlsx(f,ds,m.totalMins);
 }
 
@@ -3181,7 +3222,7 @@ function exportHistoryPdf(mi){
   f.month = m.label;
   const allDays = m.days.map(d=>({
     label: d.label+(d.date?' '+d.date:''),
-    slots: d.slots&&d.slots.length ? d.slots.filter(s=>s.start&&s.end).map(s=>`${s.start}–${s.end}`).join('  ')||'—' : '—',
+    slots: d.slots&&d.slots.length ? (d.slots.filter(s=>calcSlotMins(s)>0).map(s=>`${s.category||'Non précisé'} (${minsToHHMM(calcSlotMins(s))})`).join(', ')||'—') : '—',
     mins: d.mins,
     note: d.note||''
   }));
