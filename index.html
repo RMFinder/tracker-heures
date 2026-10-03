@@ -724,6 +724,22 @@ img, iframe { max-width: 100%; }
   <div class="export-bar" style="margin-top:14px">
     <div class="export-bar-title">Répartition par client — ce mois</div>
     <div id="client-breakdown"></div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Mes clients</span>
+      <button class="btn-sm" onclick="openClientModal(null)">+ Ajouter un client</button>
+    </div>
+    <div id="client-manage-list"></div>
+  </div>
+  <div class="export-bar" style="margin-top:14px">
+    <div class="export-bar-title">Répartition par type de travail — ce mois</div>
+    <div id="category-breakdown"></div>
+    <hr style="border:none;border-top:1px solid var(--border);margin:12px 0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Mes types de travail</span>
+      <button class="btn-sm" onclick="addCategoryFromPanel()">+ Ajouter un type</button>
+    </div>
+    <div id="category-manage-list"></div>
   </div>
   <div class="backup-bar">
     <span class="backup-bar-label">💾 Sauvegarde</span>
@@ -749,6 +765,11 @@ img, iframe { max-width: 100%; }
   </header>
   <div class="export-bar">
     <div class="export-bar-title">Informations facture</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <a href="https://www.canva.com/design/DAHVTC83dgM/e3W99YTf2vxGaLo9Fh8NHw/edit" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--blue);text-decoration:none;border:1px solid var(--blue);padding:5px 10px;border-radius:6px">🎨 Ouvrir le modèle Canva (facture éditable)</a>
+      <button type="button" onclick="copyInvoiceForCanva()" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--accent);background:none;border:1px solid var(--accent);padding:5px 10px;border-radius:6px;cursor:pointer">📋 Copier les données pour Canva</button>
+      <span id="canva-copy-hint" style="font-size:11px;color:var(--muted);align-self:center"></span>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:8px">
       <div class="export-field"><label>Ton prénom &amp; nom</label><input type="text" id="exp-name" placeholder="Marie Dupont"></div>
       <div class="export-field"><label>Ton adresse</label><input type="text" id="exp-address" placeholder="12 rue des Lilas, 74000 Annecy"></div>
@@ -787,6 +808,11 @@ img, iframe { max-width: 100%; }
       <div class="export-field"><label>Objet de la facture</label><input type="text" id="exp-objet" placeholder="Ex: Développement marketing – Marché italien"></div>
       <div class="export-field"><label>Quantité (heures)</label><input type="number" id="exp-quantite" step="0.25" min="0" placeholder="Auto" oninput="this.dataset.touched=this.value?'1':''"></div>
       <div class="export-field"><label><input type="checkbox" id="exp-show-detail" style="width:auto;margin-right:6px">Afficher le détail journalier</label></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-bottom:12px;align-items:end">
+      <div class="export-field"><label><input type="checkbox" id="exp-has-acompte" style="width:auto;margin-right:6px" onchange="document.getElementById('exp-acompte-montant').disabled=!this.checked">Un acompte a été versé</label></div>
+      <div class="export-field"><label>Montant de l'acompte</label><input type="number" id="exp-acompte-montant" step="0.01" min="0" placeholder="0.00" disabled></div>
+      <div class="export-field"><label>Note sur l'acompte (optionnel)</label><input type="text" id="exp-acompte-note" placeholder="Ex: Acompte versé le 01/09/2026"></div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <button class="btn-export" onclick="exportXlsx()">📊 Facture .xlsx</button>
@@ -1347,6 +1373,90 @@ function renderClientBreakdown(){
       <strong style="color:${r.muted?'var(--muted)':'var(--accent)'}">${minsToHHMM(r.mins)}</strong>
     </div>`).join('');
 }
+
+// ═══════════════════════════════════════════════
+// TYPES DE TRAVAIL (catégories de tâches)
+// ═══════════════════════════════════════════════
+const DEFAULT_CATEGORIES = ['Réseaux sociaux','Création de contenu','Traduction','Partenariat influenceur',"Recherche d'idées / partenariats",'Développement commercial','Administratif / reporting'];
+let taskCategories = [];
+function categoriesLoad(){
+  try{ const s=localStorage.getItem('wc_task_categories'); taskCategories = s? JSON.parse(s) : DEFAULT_CATEGORIES.slice(); }
+  catch(e){ taskCategories = DEFAULT_CATEGORIES.slice(); }
+}
+function categoriesSave(){
+  try{ localStorage.setItem('wc_task_categories', JSON.stringify(taskCategories)); }catch(e){}
+  if(typeof save==='function') save();
+}
+function categoryOptionsHtml(selected){
+  let html = `<option value=""${!selected?' selected':''}>— Type non précisé —</option>`;
+  taskCategories.forEach(cat=>{
+    html += `<option value="${cat}"${selected===cat?' selected':''}>${cat}</option>`;
+  });
+  html += `<option value="__new__">+ Nouveau type…</option>`;
+  return html;
+}
+function onDayCategoryChange(di,val){
+  if(val==='__new__'){ addCategoryPrompt({type:'day', index:di}); return; }
+  days[di].category=val; save(); updateMetrics();
+}
+function onFixedCategory(fi,val){
+  if(val==='__new__'){ addCategoryPrompt({type:'fixed', index:fi}); return; }
+  fixedDays[fi].category=val; save(); updateMetrics();
+}
+function addCategoryPrompt(pendingAssignment){
+  const name = prompt('Nom du nouveau type de travail (ex: Traduction, Veille concurrentielle…) :');
+  if(!name || !name.trim()) { renderDays(); renderPastDays(); return; }
+  const clean = name.trim();
+  if(!taskCategories.includes(clean)) taskCategories.push(clean);
+  categoriesSave();
+  if(pendingAssignment){
+    const {type, index} = pendingAssignment;
+    if(type==='day' && days[index]) days[index].category = clean;
+    if(type==='fixed' && fixedDays[index]) fixedDays[index].category = clean;
+    save();
+  }
+  renderDays(); renderPastDays(); renderCategoryManageList(); updateMetrics();
+}
+function deleteCategory(cat){
+  if(!confirm(`Supprimer le type "${cat}" ? Les heures déjà classées repasseront en "non précisé".`)) return;
+  taskCategories = taskCategories.filter(c=>c!==cat);
+  days.forEach(d=>{ if(d.category===cat) d.category=''; });
+  fixedDays.forEach(d=>{ if(d.category===cat) d.category=''; });
+  categoriesSave();
+  save();
+  renderDays(); renderPastDays(); renderCategoryManageList(); updateMetrics();
+}
+function addCategoryFromPanel(){
+  addCategoryPrompt(null);
+}
+function renderCategoryManageList(){
+  const wrap = document.getElementById('category-manage-list');
+  if(!wrap) return;
+  if(taskCategories.length===0){ wrap.innerHTML = '<div style="font-size:12px;color:var(--muted)">Aucun type de travail enregistré.</div>'; return; }
+  wrap.innerHTML = taskCategories.map(cat=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <span>${cat}</span>
+      <button class="btn-sm danger" onclick="deleteCategory('${cat.replace(/'/g,"\\'")}')" title="Supprimer">✕</button>
+    </div>`).join('');
+}
+function calcCategoryTotalMins(cat){
+  let total = fixedDays.filter(d=>(d.category||'')===cat).reduce((a,d)=>a+d.mins,0);
+  total += days.filter(d=>(d.category||'')===cat).reduce((a,d)=>a+calcDayMins(d.slots),0);
+  return total;
+}
+function renderCategoryBreakdown(){
+  const wrap = document.getElementById('category-breakdown');
+  if(!wrap) return;
+  let rows = taskCategories.map(cat=>({name:cat, mins:calcCategoryTotalMins(cat)}));
+  rows.push({name:'Non précisé', mins:calcCategoryTotalMins(''), muted:true});
+  rows = rows.filter(r=>r.mins>0 || !r.muted);
+  if(rows.every(r=>r.mins===0)){ wrap.innerHTML = '<div style="font-size:12px;color:var(--muted)">Aucune heure classée par type de travail pour l\'instant.</div>'; return; }
+  wrap.innerHTML = rows.map(r=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;${r.muted?'color:var(--muted)':''}">
+      <span>${r.name}</span>
+      <strong style="color:${r.muted?'var(--muted)':'var(--accent)'}">${minsToHHMM(r.mins)}</strong>
+    </div>`).join('');
+}
 function getMonthName(offset=0){const d=new Date();d.setMonth(d.getMonth()+offset);return d.toLocaleDateString('fr-FR',{month:'long',year:'numeric'}).replace(/^\w/,c=>c.toUpperCase());}
 function getNextMonthDays(){const now=new Date();now.setMonth(now.getMonth()+1);now.setDate(1);const year=now.getFullYear(),month=now.getMonth(),daysInMonth=new Date(year,month+1,0).getDate();return{year,month,daysInMonth,firstDow:(new Date(year,month,1).getDay()+6)%7};}
 
@@ -1360,9 +1470,9 @@ function updateQuantitePlaceholder(){
   qEl.placeholder = 'Auto : '+minsToDecimal(mins)+'h';
 }
 function updateNavBadges(){const pct=Math.min(100,(calcCurrentTotal()/TARGET_MINS)*100);document.getElementById('nav-badge-current').textContent=pct.toFixed(0)+'%';const hb=document.getElementById('nav-badge-history');hb.textContent=history.length?history.length:'';hb.style.display=history.length?'':'none';const ib=document.getElementById('nav-badge-invoices');if(ib){ib.textContent=invoicesHistory.length?invoicesHistory.length:'';ib.style.display=invoicesHistory.length?'':'none';}}
-function updateMetrics(){const done=calcCurrentTotal(),left=Math.max(0,TARGET_MINS-done),pct=Math.min(100,(done/TARGET_MINS)*100);document.getElementById('m-done').textContent=minsToHHMM(done);document.getElementById('m-left').textContent=minsToHHMM(left);document.getElementById('m-avg').textContent=minsToHHMM(left/REMAINING_DAYS);document.getElementById('bar').style.width=pct.toFixed(1)+'%';document.getElementById('pct-label').textContent=pct.toFixed(1)+'%';updateNavBadges();renderClientBreakdown();}
+function updateMetrics(){const done=calcCurrentTotal(),left=Math.max(0,TARGET_MINS-done),pct=Math.min(100,(done/TARGET_MINS)*100);document.getElementById('m-done').textContent=minsToHHMM(done);document.getElementById('m-left').textContent=minsToHHMM(left);document.getElementById('m-avg').textContent=minsToHHMM(left/REMAINING_DAYS);document.getElementById('bar').style.width=pct.toFixed(1)+'%';document.getElementById('pct-label').textContent=pct.toFixed(1)+'%';updateNavBadges();renderClientBreakdown();renderCategoryBreakdown();}
 
-function renderPastDays(){const c=document.getElementById('past-days-list');c.innerHTML='';fixedDays.forEach((d,fi)=>{const hVal=Math.floor(d.mins/60),mVal=d.mins%60;const wrap=document.createElement('div');wrap.className='past-day';wrap.innerHTML=`<div class="past-day-header"><input class="past-day-label" type="text" value="${d.label}" onchange="onFixedLabel(${fi},this.value)"><select onchange="onFixedClient(${fi},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px;margin-left:8px">${clientOptionsHtml(d.client)}</select><div class="past-day-header-right"><input class="past-mins-input" type="number" min="0" max="23" value="${hVal}" onchange="onFixedH(${fi},this.value)"><span class="past-mins-unit">h</span><input class="past-mins-input" type="number" min="0" max="59" value="${mVal}" onchange="onFixedM(${fi},this.value)" style="width:38px"><span class="past-mins-unit">min</span><button class="btn-del-day" onclick="deleteFixedDay(${fi})" title="Supprimer cette journée">✕</button></div></div><div class="past-day-note"><textarea id="fnote-${fi}" rows="1" placeholder="Ajouter une note…" oninput="onFixedNote(${fi},this.value)">${d.note||''}</textarea></div>`;c.appendChild(wrap);const ta=document.getElementById('fnote-'+fi);if(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});renderClientBreakdown();}
+function renderPastDays(){const c=document.getElementById('past-days-list');c.innerHTML='';fixedDays.forEach((d,fi)=>{const hVal=Math.floor(d.mins/60),mVal=d.mins%60;const wrap=document.createElement('div');wrap.className='past-day';wrap.innerHTML=`<div class="past-day-header"><input class="past-day-label" type="text" value="${d.label}" onchange="onFixedLabel(${fi},this.value)"><select onchange="onFixedClient(${fi},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px;margin-left:8px">${clientOptionsHtml(d.client)}</select><select onchange="onFixedCategory(${fi},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px;margin-left:8px">${categoryOptionsHtml(d.category)}</select><div class="past-day-header-right"><input class="past-mins-input" type="number" min="0" max="23" value="${hVal}" onchange="onFixedH(${fi},this.value)"><span class="past-mins-unit">h</span><input class="past-mins-input" type="number" min="0" max="59" value="${mVal}" onchange="onFixedM(${fi},this.value)" style="width:38px"><span class="past-mins-unit">min</span><button class="btn-del-day" onclick="deleteFixedDay(${fi})" title="Supprimer cette journée">✕</button></div></div><div class="past-day-note"><textarea id="fnote-${fi}" rows="1" placeholder="Ajouter une note…" oninput="onFixedNote(${fi},this.value)">${d.note||''}</textarea></div>`;c.appendChild(wrap);const ta=document.getElementById('fnote-'+fi);if(ta){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});renderClientBreakdown();}
 
 function deleteFixedDay(fi){
   if(confirm('Supprimer la journée "'+fixedDays[fi].label+'" ('+minsToHHMM(fixedDays[fi].mins)+') ?')){
@@ -1380,15 +1490,22 @@ function clientOptionsHtml(selectedId){
   billingClients.forEach(c=>{
     html += `<option value="${c.id}"${selectedId===c.id?' selected':''}>${c.name}</option>`;
   });
+  html += `<option value="__new__">+ Nouveau client…</option>`;
   return html;
 }
 function addDay(){
   const now=new Date();
   const dateKey=now.toISOString().slice(0,10);
   const label=now.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'2-digit'});
-  days.push({label,date:dateKey,slots:[{start:'',end:''}],note:'',client:''});save();renderDays();updateMetrics();}
-function onDayClientChange(di,val){days[di].client=val;save();updateMetrics();}
-function onFixedClient(fi,val){fixedDays[fi].client=val;save();updateMetrics();}
+  days.push({label,date:dateKey,slots:[{start:'',end:''}],note:'',client:'',category:''});save();renderDays();updateMetrics();}
+function onDayClientChange(di,val){
+  if(val==='__new__'){ openClientModal(null, {type:'day', index:di}); renderDays(); return; }
+  days[di].client=val;save();updateMetrics();
+}
+function onFixedClient(fi,val){
+  if(val==='__new__'){ openClientModal(null, {type:'fixed', index:fi}); renderPastDays(); return; }
+  fixedDays[fi].client=val;save();updateMetrics();
+}
 function onDateChange(di,val){
   days[di].date=val;
   if(val){
@@ -1404,7 +1521,7 @@ function validateDay(di){
   const d=days[di];
   const m=calcDayMins(d.slots);
   if(m===0){alert('Cette journée ne contient pas d\'heures saisies.');return;}
-  fixedDays.push({label:d.label,date:d.date||'',mins:m,note:d.note||'',client:d.client||''});
+  fixedDays.push({label:d.label,date:d.date||'',mins:m,note:d.note||'',client:d.client||'',category:d.category||''});
   fixedDays.sort((a,b)=>(a.date||'9999')>(b.date||'9999')?1:-1);
   days.splice(di,1);
   save();renderPastDays();renderDays();updateMetrics();
@@ -1415,7 +1532,7 @@ function removeSlot(di,si){days[di].slots.splice(si,1);if(days[di].slots.length=
 function onTimeChange(di,si,field,val){days[di].slots[si][field]=val;save();const s=days[di].slots[si];const sm=timeToMins(s.start),em=timeToMins(s.end);const el=document.getElementById('dur-'+di+'-'+si);if(el){if(sm!==null&&em!==null&&em>sm){el.textContent=minsToHHMM(em-sm);el.className='slot-dur filled';}else{el.textContent='—';el.className='slot-dur';}}const tot=document.getElementById('daytotal-'+di);if(tot){const m=calcDayMins(days[di].slots);tot.textContent=minsToHHMM(m);tot.className='day-total'+(m===0?' zero':'');}updateMetrics();}
 function onNoteChange(di,val){days[di].note=val;save();const el=document.getElementById('note-'+di);if(el){el.style.height='auto';el.style.height=el.scrollHeight+'px';}}
 function onLabelChange(di,val){days[di].label=val;save();}
-function renderDays(){const c=document.getElementById('days-container');c.innerHTML='';days.forEach((day,di)=>{const dayM=calcDayMins(day.slots);const block=document.createElement('div');block.className='day-block';const slotsHTML=day.slots.map((slot,si)=>{const sm=timeToMins(slot.start),em=timeToMins(slot.end);let dt='—',dc='slot-dur';if(sm!==null&&em!==null&&em>sm){dt=minsToHHMM(em-sm);dc='slot-dur filled';}return`<div class="slot"><div><label>Début</label><input type="time" value="${slot.start}" onchange="onTimeChange(${di},${si},'start',this.value)"></div><div><label>Fin</label><input type="time" value="${slot.end}" onchange="onTimeChange(${di},${si},'end',this.value)"></div><div><label style="text-align:center;display:block">Durée</label><div id="dur-${di}-${si}" class="${dc}">${dt}</div></div><button class="btn-remove" onclick="removeSlot(${di},${si})">✕</button></div>`;}).join('');block.innerHTML=`<div class="day-header"><div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="date" value="${day.date||''}" onchange="onDateChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;cursor:pointer"><input id="datelabel-${di}" class="day-name-input" type="text" value="${day.label}" onchange="onLabelChange(${di},this.value)" placeholder="Nom du jour" style="flex:1"><select onchange="onDayClientChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${clientOptionsHtml(day.client)}</select></div><div class="day-header-right"><div id="daytotal-${di}" class="day-total${dayM===0?' zero':''}">${minsToHHMM(dayM)}</div><button class="btn-del-day" onclick="deleteDay(${di})">✕</button></div></div><div class="slots">${slotsHTML}</div><button class="btn-add-slot" onclick="addSlot(${di})">+ Ajouter une plage horaire</button><div class="note-area"><textarea id="note-${di}" rows="3" placeholder="Notes, tâches réalisées, remarques…" oninput="onNoteChange(${di},this.value)">${day.note}</textarea></div><div style="padding:0 14px 12px;display:flex;justify-content:flex-end"><button class="btn-validate-day" id="vbtn-${di}" onclick="validateDay(${di})" ${dayM===0?'disabled':''}>✓ Valider la journée</button></div>`;c.appendChild(block);const ta=document.getElementById('note-'+di);if(ta&&day.note){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});}
+function renderDays(){const c=document.getElementById('days-container');c.innerHTML='';days.forEach((day,di)=>{const dayM=calcDayMins(day.slots);const block=document.createElement('div');block.className='day-block';const slotsHTML=day.slots.map((slot,si)=>{const sm=timeToMins(slot.start),em=timeToMins(slot.end);let dt='—',dc='slot-dur';if(sm!==null&&em!==null&&em>sm){dt=minsToHHMM(em-sm);dc='slot-dur filled';}return`<div class="slot"><div><label>Début</label><input type="time" value="${slot.start}" onchange="onTimeChange(${di},${si},'start',this.value)"></div><div><label>Fin</label><input type="time" value="${slot.end}" onchange="onTimeChange(${di},${si},'end',this.value)"></div><div><label style="text-align:center;display:block">Durée</label><div id="dur-${di}-${si}" class="${dc}">${dt}</div></div><button class="btn-remove" onclick="removeSlot(${di},${si})">✕</button></div>`;}).join('');block.innerHTML=`<div class="day-header"><div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0"><input type="date" value="${day.date||''}" onchange="onDateChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;cursor:pointer"><input id="datelabel-${di}" class="day-name-input" type="text" value="${day.label}" onchange="onLabelChange(${di},this.value)" placeholder="Nom du jour" style="flex:1"><select onchange="onDayClientChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${clientOptionsHtml(day.client)}</select><select onchange="onDayCategoryChange(${di},this.value)" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);max-width:150px">${categoryOptionsHtml(day.category)}</select></div><div class="day-header-right"><div id="daytotal-${di}" class="day-total${dayM===0?' zero':''}">${minsToHHMM(dayM)}</div><button class="btn-del-day" onclick="deleteDay(${di})">✕</button></div></div><div class="slots">${slotsHTML}</div><button class="btn-add-slot" onclick="addSlot(${di})">+ Ajouter une plage horaire</button><div class="note-area"><textarea id="note-${di}" rows="3" placeholder="Notes, tâches réalisées, remarques…" oninput="onNoteChange(${di},this.value)">${day.note}</textarea></div><div style="padding:0 14px 12px;display:flex;justify-content:flex-end"><button class="btn-validate-day" id="vbtn-${di}" onclick="validateDay(${di})" ${dayM===0?'disabled':''}>✓ Valider la journée</button></div>`;c.appendChild(block);const ta=document.getElementById('note-'+di);if(ta&&day.note){ta.style.height='auto';ta.style.height=ta.scrollHeight+'px';}});}
 
 function openValidateModal(){const total=calcCurrentTotal();document.getElementById('validate-info').innerHTML=`Total du mois : <strong>${minsToHHMM(total)}</strong> sur <strong>${minsToHHMM(TARGET_MINS)}</strong> (${((total/TARGET_MINS)*100).toFixed(1)}%)`;document.getElementById('validate-label').value=getMonthName(0);document.getElementById('validate-target').value=80;document.getElementById('validate-note').value='';document.getElementById('modal-validate').classList.add('open');}
 function validateMonth(){const label=document.getElementById('validate-label').value||getMonthName(0),target=parseFloat(document.getElementById('validate-target').value)||80,note=document.getElementById('validate-note').value,totalMins=calcCurrentTotal(),allDays=[...fixedDays.map(d=>({label:d.label,mins:d.mins,slots:[],note:d.note||''})),...days.map(d=>({label:d.label,mins:calcDayMins(d.slots),slots:d.slots,note:d.note||''}))];history.unshift({label,target,totalMins,days:allDays,note,date:new Date().toISOString()});fixedDays=[];days=[];save();closeModal('modal-validate');renderPastDays();renderDays();updateMetrics();updateNavBadges();showView('history');}
@@ -1528,8 +1645,10 @@ function wireClientFieldPersistence(){
     el.addEventListener('change', ()=>persistCurrentClientFieldEdit(id));
   });
 }
-function openClientModal(id){
+let pendingClientAssignment = null;
+function openClientModal(id, pendingAssignment){
   editClientId = id;
+  pendingClientAssignment = pendingAssignment || null;
   const c = id ? billingClients.find(c=>c.id===id) : null;
   document.getElementById('modal-client-title').textContent = c ? 'Modifier le client' : 'Nouveau client';
   document.getElementById('bc-name').value = c?.name||'';
@@ -1562,18 +1681,84 @@ function saveClient(){
   billingSaveClients();
   closeModal('modal-client');
   renderClientSelect();
-  document.getElementById('exp-client-select').value = obj.id;
-  onClientSelectChange();
-}
-function deleteClient(){
-  if(editClientId && confirm('Supprimer ce client ?')){
-    billingClients = billingClients.filter(c=>c.id!==editClientId);
-    billingSaveClients();
-    closeModal('modal-client');
-    renderClientSelect();
+  renderClientManageList();
+  if(pendingClientAssignment){
+    const {type, index} = pendingClientAssignment;
+    if(type==='day' && days[index]){ days[index].client = obj.id; save(); renderDays(); updateMetrics(); }
+    else if(type==='fixed' && fixedDays[index]){ fixedDays[index].client = obj.id; save(); renderPastDays(); updateMetrics(); }
+    pendingClientAssignment = null;
+  } else {
+    const sel = document.getElementById('exp-client-select');
+    if(sel){ sel.value = obj.id; onClientSelectChange(); }
   }
 }
+function deleteClient(){
+  if(editClientId && confirm('Supprimer ce client ? Les heures déjà attribuées repasseront en "Non attribué".')){
+    billingClients = billingClients.filter(c=>c.id!==editClientId);
+    days.forEach(d=>{ if(d.client===editClientId) d.client=''; });
+    fixedDays.forEach(d=>{ if(d.client===editClientId) d.client=''; });
+    billingSaveClients();
+    save();
+    closeModal('modal-client');
+    renderClientSelect();
+    renderClientManageList();
+    renderDays();
+    renderPastDays();
+    updateMetrics();
+  }
+}
+function renderClientManageList(){
+  const wrap = document.getElementById('client-manage-list');
+  if(!wrap) return;
+  if(billingClients.length===0){
+    wrap.innerHTML = '<div style="font-size:12px;color:var(--muted)">Aucun client enregistré.</div>';
+    return;
+  }
+  wrap.innerHTML = billingClients.map(c=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <span>${c.name}</span>
+      <span>
+        <button class="btn-sm" onclick="openClientModal('${c.id}')" title="Modifier">✎</button>
+        <button class="btn-sm danger" onclick="editClientId='${c.id}';deleteClient()" title="Supprimer">✕</button>
+      </span>
+    </div>`).join('');
+}
 
+function copyInvoiceForCanva(){
+  const f = getFields();
+  const totalMins = f.clientId ? calcClientTotalMins(f.clientId) : calcCurrentTotal();
+  const totalH = (f.manualHours!=null && !isNaN(f.manualHours)) ? f.manualHours : parseFloat(minsToDecimal(totalMins));
+  const totalHT = (totalH * f.rate).toFixed(2);
+  const cur = f.currency || 'EUR';
+  const objet = f.objet && f.objet.trim() ? f.objet.trim() : `Prestations de services — ${f.month}`;
+  const today = new Date().toLocaleDateString('fr-FR');
+
+  const text = `Mets à jour le modèle Canva de facture avec ces données :
+- N° facture : ${f.invoiceNum}
+- Date : ${today}
+- Émis par : ${f.name} — ${f.address} — ${f.email}
+- Client : ${f.client}${f.clientContact ? ' — Contact : '+f.clientContact : ''}${f.clientAddr ? ' — '+f.clientAddr : ''}
+- Objet / description : ${objet}
+- Quantité (heures) : ${totalH}
+- Taux horaire : ${f.rate} ${cur}
+- Montant HT / Total : ${totalHT} ${cur}
+- TVA : ${f.tvaExempt !== false ? 'Non applicable (non assujettie)' : 'À appliquer'}
+- Conditions de paiement : ${f.paymentTerms}
+- IBAN : ${f.iban || '—'}${f.titulaire ? ' — Titulaire : '+f.titulaire : ''}`;
+
+  const hint = document.getElementById('canva-copy-hint');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>{
+      if(hint){ hint.textContent = '✓ Copié — colle-le dans le chat Claude'; setTimeout(()=>hint.textContent='',4000); }
+    }).catch(()=>{
+      if(hint) hint.textContent = 'Copie impossible, voir console';
+      console.log(text);
+    });
+  } else {
+    console.log(text);
+    if(hint) hint.textContent = 'Copié dans la console (voir F12)';
+  }
+}
 function nextInvoiceNumber(){
   const ym = new Date().toISOString().slice(0,7);
   const counters = JSON.parse(localStorage.getItem('wc_invoice_counters')||'{}');
@@ -1685,6 +1870,9 @@ function getFields(){
     objet:        document.getElementById('exp-objet')?.value||'',
     showDetail:   document.getElementById('exp-show-detail') ? document.getElementById('exp-show-detail').checked : false,
     manualHours:  (() => { const v = document.getElementById('exp-quantite')?.value; return v!=='' && v!=null ? parseFloat(v) : null; })(),
+    hasAcompte:   document.getElementById('exp-has-acompte') ? document.getElementById('exp-has-acompte').checked : false,
+    acompteMontant: (() => { const v = document.getElementById('exp-acompte-montant')?.value; return v!=='' && v!=null ? parseFloat(v) : 0; })(),
+    acompteNote:  document.getElementById('exp-acompte-note')?.value||'',
   };
 }
 function buildDays(clientId){
@@ -3004,6 +3192,8 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   const autoTotalH = parseFloat(minsToDecimal(totalMins));
   const totalH  = (f.manualHours!=null && !isNaN(f.manualHours)) ? f.manualHours : autoTotalH;
   const totalHT = (totalH * f.rate).toFixed(2);
+  const acompte = (f.hasAcompte && f.acompteMontant>0) ? f.acompteMontant : 0;
+  const solde = (parseFloat(totalHT) - acompte).toFixed(2);
   const today   = new Date().toLocaleDateString('fr-FR');
   const due     = new Date(); due.setDate(due.getDate()+parseInt(f.paymentTerms)||30);
   const dueStr  = due.toLocaleDateString('fr-FR');
@@ -3149,8 +3339,13 @@ function buildAndDownloadPdf(f, allDays, totalMins){
   <div class="totals">
     <div class="line">Sous-total HT : ${totalHT} ${cur}</div>
     <div class="line">TVA : ${tvaExempt ? 'Non applicable' : '—'}</div>
-    <div class="total-ht">Total HT : ${totalHT} ${cur}</div>
+    <div class="total-ht" style="${acompte>0?'font-size:15px;font-weight:600;color:#2a2a24;margin-top:4px':''}">Total HT : ${totalHT} ${cur}</div>
+    ${acompte>0 ? `
+    <div class="line" style="color:#7c2c42">Acompte déjà versé : − ${acompte.toFixed(2)} ${cur}</div>
+    <div class="total-ht">Solde à payer : ${solde} ${cur}</div>
+    ` : ''}
   </div>
+  ${acompte>0 && f.acompteNote ? `<div class="tva-note" style="text-align:right;font-style:normal">${f.acompteNote}</div>` : ''}
   ${tvaExempt ? `<div class="tva-note">Entreprise non assujettie à la TVA — Suisse (CA &lt; CHF 100'000)</div>` : ''}
 
   <div class="payment-box">
@@ -3477,6 +3672,8 @@ function exportBackupJson(){
 // ═══════════════════════════════════════════════
 try{ localStorage.removeItem('wc_style'); }catch(e){} // la DA Astarita Studio est désormais fixe
 document.getElementById('dash-logo').src = LOGO_WORDMARK_URI;
+billingLoad();
+categoriesLoad();
 load(); smLoad(); taskLoad(); contentLoad(); canvaLoad(); ideasLoad();
 document.getElementById('cur-month-title').textContent = getMonthName(0);
 renderPastDays(); renderDays(); updateMetrics(); updateNavBadges();
@@ -3497,11 +3694,13 @@ document.addEventListener('firebase-ready', ()=>{
 document.querySelectorAll('.modal-backdrop').forEach(el=>{
   el.addEventListener('click', e=>{ if(e.target===el) el.classList.remove('open'); });
 });
-billingLoad();
 invoicesLoad();
 loadBillingSettingsIntoForm();
 if(!document.getElementById('exp-invoice-num').value) document.getElementById('exp-invoice-num').value = nextInvoiceNumber();
 renderClientSelect();
+renderClientManageList();
+renderCategoryManageList();
+renderCategoryBreakdown();
 wireBillingSettingsPersistence();
 wireClientFieldPersistence();
 </script>
